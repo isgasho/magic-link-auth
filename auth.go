@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,24 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	uuid "github.com/nu7hatch/gouuid"
 )
+
+const bodyTemplate = `
+<html>
+  <head>
+    <title>{{ .Title }}</title>
+  </head>
+  <body>
+    <p>
+	  Hi,<br />
+	  <br />
+      You are receiving this email because you asked to sign in to your account on {{ .BaseURL }}.
+	  If this was an accident, or someone else initiated the email, you can ignore this.
+	</p>
+	<p>
+      To sign in to {{ .BaseURL }} on the web, click <a href="{{ .BaseURL }}/auth/{{ .AuthHash }}?redirect={{ .RedirectURL }}">here</a>
+    </p>
+</body>
+</html>`
 
 type AuthClaims struct {
 	User string `json:"user"`
@@ -79,18 +98,22 @@ func actuallySendAuthEmail(recipient string, authHash, redirectURL string) error
 		recipient,
 	}
 
-	subject := "Click on the magic link to login"
-	body := fmt.Sprintf(
-		"<html><body>Click <a href=\"%s/auth/%s?redirect=%s\">here</a></body></html>",
-		"http://0.0.0.0:8000",
-		authHash,
-		redirectURL,
-	)
+	subject := "magic-link-auth Sign-in"
+	buf := &bytes.Buffer{}
+	ctx := struct {
+		Title       string
+		AuthHash    string
+		RedirectURL string
+		BaseURL     string
+	}{
+		Title:       "magic-link-auth Sign-in",
+		AuthHash:    authHash,
+		BaseURL:     "http://0.0.0.0:8000",
+		RedirectURL: redirectURL,
+	}
+	if err := render("body", bodyTemplate, ctx, buf); err != nil {
+		return err
+	}
 
-	err := sender.SendMail(
-		recipients,
-		subject,
-		body)
-
-	return err
+	return sender.SendMail(recipients, subject, buf.String())
 }

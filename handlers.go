@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"text/template"
 	"time"
@@ -12,20 +13,20 @@ import (
 
 const authCookieName string = "_krb_cookie"
 
-const loginTemplate = `
+const emailLoginTemplate = `
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@latest/css/pico.min.css">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Login</title>
+	<title>{{ .Title }} :: Email Login</title>
   </head>
 <body>
   <main class="container">
     <article class="grid">
       <div>
         <hgroup>
-          <h1>Login</h1>
+          <h1>Email Login</h1>
           <h2>Please login by entering your email address</h2>
         </hgroup>
         <form method="GET" action="/magic-link">
@@ -47,7 +48,7 @@ const unauthenticatedTemplate = `
   <head>
     <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@latest/css/pico.min.css">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Unauthenticated</title>
+	<title>{{ .Title }} :: Unauthenticated</title>
   </head>
 <body>
   <main class="container">
@@ -58,7 +59,7 @@ const unauthenticatedTemplate = `
           <h2>Authentication required. Please login with one of the options below:</h2>
         </hgroup>
 		<form>
-		  <button formaction="/login">Magic Link</button>
+		  <button formaction="/login">Email</button>
 		</form>
       </div>
     <div></div>
@@ -68,23 +69,67 @@ const unauthenticatedTemplate = `
 </html>
 `
 
-func LoginHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("Referer: %s\n", r.Referer())
+const successTemplate = `
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@latest/css/pico.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>{{ .Title }} :: Success</title>
+  </head>
+<body>
+  <main class="container">
+    <article class="grid">
+      <div>
+        <hgroup>
+          <h1>Success!</h1>
+          <h2>Magic Link successfully sent via {{ .Type }} to {{ .Dest }}</h2>
+        </hgroup>
+      </div>
+    <div></div>
+  </article>
+</main>
+</body>
+</html>
+`
 
-	t, err := template.New("login").Parse(loginTemplate)
+const indexTemplate = `
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@latest/css/pico.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>{{ .Title }} :: Index</title>
+  </head>
+<body>
+  <main class="container">
+    <article class="grid">
+	  <p>Hello World</p>
+  </article>
+</main>
+</body>
+</html>
+`
+
+func render(name, tmpl string, ctx interface{}, w io.Writer) error {
+	t, err := template.New(name).Parse(tmpl)
 	if err != nil {
-		fmt.Fprintf(w, "error %w", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return err
 	}
 
-	data := struct {
+	return t.Execute(w, ctx)
+}
+
+func LoginHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := struct {
+		Title    string
 		Redirect string
 	}{
+		Title:    "magic-link-auth Demo",
 		Redirect: r.Referer(),
 	}
 
-	err = t.Execute(w, data)
-	if err != nil {
+	if err := render("login", emailLoginTemplate, ctx, w); err != nil {
 		fmt.Fprintf(w, "error %w", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -128,8 +173,16 @@ func AuthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func UnauthenticatedHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, unauthenticatedTemplate)
-	//http.Redirect(w, r, "/login", http.StatusFound)
+	ctx := struct {
+		Title string
+	}{
+		Title: "magic-link-auth Demo",
+	}
+
+	if err := render("unauthenticated", unauthenticatedTemplate, ctx, w); err != nil {
+		fmt.Fprintf(w, "error %w", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }
 
 func isValidCookie(c *http.Cookie) bool {
@@ -163,7 +216,16 @@ func IsAuthenticated(f http.HandlerFunc) http.HandlerFunc {
 }
 
 func ProtectedHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, "success")
+	ctx := struct {
+		Title string
+	}{
+		Title: "magic-link-auth Demo",
+	}
+
+	if err := render("index", indexTemplate, ctx, w); err != nil {
+		fmt.Fprintf(w, "error %w", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }
 
 func SaveMagicString(email string, hash string) error {
@@ -210,5 +272,18 @@ func MagicLinkHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Fprintln(w, "Success")
+	ctx := struct {
+		Title string
+		Type  string
+		Dest  string
+	}{
+		Title: "magic-link-auth Demo",
+		Type:  "email",
+		Dest:  email,
+	}
+
+	if err := render("success", successTemplate, ctx, w); err != nil {
+		fmt.Fprintf(w, "error %w", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }
