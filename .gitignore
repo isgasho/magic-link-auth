@@ -2,4 +2,5 @@
 *.db
 *.bak
 
-/magic-link-auth
+/cmd/magic-link-auth-demo/magic-link-auth-demo
+/magic-link-auth-demo

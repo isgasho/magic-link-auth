@@ -1,4 +1,4 @@
-package main
+package magiclinkauth
 
 import (
 	"fmt"
@@ -120,7 +120,7 @@ func render(name, tmpl string, ctx interface{}, w io.Writer) error {
 	return t.Execute(w, ctx)
 }
 
-func LoginHandler(w http.ResponseWriter, r *http.Request) {
+func (m *MagicLinkAuth) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := struct {
 		Title    string
 		Redirect string
@@ -135,14 +135,14 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func AuthHandler(w http.ResponseWriter, r *http.Request) {
+func (m *MagicLinkAuth) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 	redirect := params.Get("redirect")
 
 	vars := mux.Vars(r)
 	hash := vars["hash"]
 
-	email, err := getEmailFromHash(hash)
+	email, err := m.getEmailFromHash(hash)
 
 	if err != nil || email == "" {
 		w.WriteHeader(404)
@@ -172,7 +172,7 @@ func AuthHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirect, http.StatusFound)
 }
 
-func UnauthenticatedHandler(w http.ResponseWriter, r *http.Request) {
+func (m *MagicLinkAuth) UnauthenticatedHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := struct {
 		Title string
 	}{
@@ -193,8 +193,8 @@ func isValidCookie(c *http.Cookie) bool {
 	return HasValidAuthToken(c.Value)
 }
 
-func getEmailFromHash(hash string) (string, error) {
-	data, err := db.Get([]byte(fmt.Sprintf("/magic/%s/email", hash)))
+func (m *MagicLinkAuth) getEmailFromHash(hash string) (string, error) {
+	data, err := m.db.Get([]byte(fmt.Sprintf("/magic/%s/email", hash)))
 	if err != nil {
 		return "Error", err
 	}
@@ -202,7 +202,7 @@ func getEmailFromHash(hash string) (string, error) {
 	return string(data), nil
 }
 
-func IsAuthenticated(f http.HandlerFunc) http.HandlerFunc {
+func (m *MagicLinkAuth) IsAuthenticated(f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		c, err := r.Cookie(authCookieName)
 
@@ -210,12 +210,12 @@ func IsAuthenticated(f http.HandlerFunc) http.HandlerFunc {
 			f(w, r)
 		} else {
 			// cookie not present or invalid
-			UnauthenticatedHandler(w, r)
+			m.UnauthenticatedHandler(w, r)
 		}
 	}
 }
 
-func ProtectedHandler(w http.ResponseWriter, r *http.Request) {
+func (m *MagicLinkAuth) ProtectedHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := struct {
 		Title string
 	}{
@@ -228,8 +228,8 @@ func ProtectedHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func SaveMagicString(email string, hash string) error {
-	if err := db.Put([]byte(fmt.Sprintf("/magic/%s/email", hash)), []byte(email)); err != nil {
+func (m *MagicLinkAuth) SaveMagicString(email string, hash string) error {
+	if err := m.db.Put([]byte(fmt.Sprintf("/magic/%s/email", hash)), []byte(email)); err != nil {
 		return err
 	}
 
@@ -238,14 +238,14 @@ func SaveMagicString(email string, hash string) error {
 	if err != nil {
 		return err
 	}
-	if err := db.Put([]byte(fmt.Sprintf("/magic/%s/expires", hash)), data); err != nil {
+	if err := m.db.Put([]byte(fmt.Sprintf("/magic/%s/expires", hash)), data); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func MagicLinkHandler(w http.ResponseWriter, r *http.Request) {
+func (m *MagicLinkAuth) MagicLinkHandler(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 
 	email := params.Get("email")
@@ -258,7 +258,7 @@ func MagicLinkHandler(w http.ResponseWriter, r *http.Request) {
 
 	hash, err := GenerateHashString()
 
-	err = SaveMagicString(email, hash)
+	err = m.SaveMagicString(email, hash)
 
 	if err != nil {
 		fmt.Fprintln(w, err)

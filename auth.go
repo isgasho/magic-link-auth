@@ -1,4 +1,4 @@
-package main
+package magiclinkauth
 
 import (
 	"bytes"

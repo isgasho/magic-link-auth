@@ -1,4 +1,4 @@
-package main
+package magiclinkauth
 
 // NOTE:
 // https://github.com/tangingw/go_smtp/blob/master/send_mail.go
